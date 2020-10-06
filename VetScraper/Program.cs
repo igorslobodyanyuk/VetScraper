@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using CsvHelper;
@@ -13,23 +14,51 @@ namespace VetScraper
     {
         static async Task Main(string[] args)
         {
-            var stores = await GetStores();
+            var usZipCodes = GetUsZipCodes();
 
-            await SaveStores(stores);
+            var getStoresTasks = usZipCodes.Select(zipCode => GetStores(zipCode));
+            var allStores = await Task.WhenAll(getStoresTasks);
+
+            var uniqueStores = GetUniqueStores(allStores);
+
+            await SaveStores(uniqueStores);
         }
 
-        private static async Task<Store[]> GetStores()
+        private static ICollection<string> GetUsZipCodes()
         {
-            var client = new HttpClient();
-            client.BaseAddress = new Uri("https://www.1800petmeds.com/on/demandware.store/Sites-1800petmeds-Site/default/");
+            return File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "uscodes.txt"))
+                .Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).ToList();
+        }
 
-            var response = await client.GetAsync("Stores-FindStores");
+        private static async Task<Store[]> GetStores(string usZipCode)
+        {
+            if (string.IsNullOrWhiteSpace(usZipCode))
+                throw new ArgumentNullException(nameof(usZipCode));
+
+            using var client = new HttpClient();
+
+            var response = await client.GetAsync(
+                $"https://www.1800petmeds.com/on/demandware.store/Sites-1800petmeds-Site/default/Stores-FindStores?showMap=false&radius=100.0&postalCode={usZipCode}");
             response.EnsureSuccessStatusCode();
 
-            string responseBody = await response.Content.ReadAsStringAsync();
+            var responseBody = await response.Content.ReadAsStringAsync();
             var result = JsonConvert.DeserializeObject<ResponseRoot>(responseBody);
 
             return result.Stores;
+        }
+
+        private static IEnumerable<Store> GetUniqueStores(Store[][] allStores)
+        {
+            var storesDictionary = new Dictionary<string, Store>();
+            foreach (var stores in allStores)
+            {
+                foreach (var store in stores)
+                {
+                    storesDictionary.TryAdd(store.Id, store);
+                }
+            }
+
+            return storesDictionary.Values;
         }
 
         private static async Task SaveStores(IEnumerable<Store> stores)
