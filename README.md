@@ -1,6 +1,6 @@
 # VetScraper
 
-A .NET Core console application that finds scrapes vet store addresses from the following website: https://www.1800petmeds.com/vetdirectory
+A .NET Core console application that scrapes vet store addresses from the following website: https://www.1800petmeds.com/vetdirectory
 
 In order to get store addresses, run a console app and look for the results in the "stores.csv" file in the executing application folder.
 
